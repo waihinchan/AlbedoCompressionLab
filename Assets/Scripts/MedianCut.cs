@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
-
+// testchange
 public class MedianCut 
 {
     static Color[] GetRange(List<Color> _pixels){
