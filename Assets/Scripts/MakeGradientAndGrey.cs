@@ -8,7 +8,7 @@ using System.IO;
 using System.Linq;
 public class GradientMapGenerator : EditorWindow
 {   
-    // static private bool DebugMode;
+    static private bool midmode = true;
     static private Shader GreyMapShader;
     
     static private Texture2D gradientMap;
@@ -18,6 +18,7 @@ public class GradientMapGenerator : EditorWindow
     static public Texture2D sourceImage;
     static private List<Vector3> hsvPixels;
     static int mip;
+   
     static float minH = 0;
     static float maxH = 0;
     static float minS = 0;
@@ -50,6 +51,7 @@ public class GradientMapGenerator : EditorWindow
         LoadShader();
         
     }
+    #region notused
     static int SortByS(Vector3 pixel1,Vector3 pixel2){
         return pixel1.y.CompareTo(pixel2.y);
     }
@@ -148,14 +150,39 @@ public class GradientMapGenerator : EditorWindow
         readwriteOnOff(path,false);
         result = $"min hue is {(minH)}\nmax hue is {(maxH)}\nminV is {minV}\nmaxV is {maxV}\nminS is {minS}\nmaxS is {maxS}";
     }
+    #endregion
+    static void generateStatisticsMap(Color[] _lookup,Color[] source,Texture2D _sourceImage,int[] StatisticsResult){
+        Color[] StatisticsMapPixels  = new Color[_lookup.Length * _lookup.Length];
+        for(int i = 0; i < StatisticsMapPixels.Length; i++){
+            int index = i%_lookup.Length;
+            if(i<_lookup.Length * (int)_lookup.Length/2){
+                StatisticsMapPixels[i] = _lookup[index];
+            }
+            else{
+                float p = 10 * StatisticsResult[index] / (float)source.Length;
+                StatisticsMapPixels[i] = new Color(p,p,p);
+            }
+        }
+        
+        Texture2D StatisticsMapTex = new Texture2D(_lookup.Length,_lookup.Length,TextureFormat.RGB24,false,true);
+        StatisticsMapTex.SetPixels(StatisticsMapPixels);
+        StatisticsMapTex.Apply();
+        string usmid = midmode ? "mid" : "avg" ;
+        SaveTexturePNG(StatisticsMapTex,_lookup.Length,_lookup.Length,$"{_sourceImage.name}_Statistics_{usmid}");
+    }
     static void generateGreyMap(Color[] _lookup,Color[] source,Texture2D _sourceImage){
         if(GreyMapShader==null){
             LoadShader();
         }
-        Texture2D tempTex = new Texture2D(_sourceImage.width,_sourceImage.height,TextureFormat.RGBA32,false,true);
-        Color[] greyPixels = MedianCut.FindCloestColor(_lookup,source);
+        Texture2D tempTex = new Texture2D(_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),TextureFormat.RGBA32,false,true);
+        int[] StatisticsMap;
+        Color[] newlookup;
+        Color[] greyPixels = MedianCut.FindCloestColor(_lookup,source,out StatisticsMap,out newlookup);
+        GenerateLookupTex(newlookup,_sourceImage);
+        generateStatisticsMap(_lookup,source,_sourceImage,StatisticsMap);
         tempTex.SetPixels(greyPixels);
         tempTex.Apply();
+
         Material tempMat = new Material(GreyMapShader);
         RenderTexture checkMap = new RenderTexture(_sourceImage.width,_sourceImage.height,0,RenderTextureFormat.Default,RenderTextureReadWrite.Linear); //这里数据因为是已经计算好的 只是用于分离通道 所以直接线性写入不要修改
         tempMat.SetTexture("_SourceTex",tempTex);
@@ -163,23 +190,24 @@ public class GradientMapGenerator : EditorWindow
         Graphics.Blit(tempTex,checkMap,tempMat);
         tempMat.SetInt("_Grey",1);
         tempMat.SetTexture("_SourceTex",tempTex);
-        RenderTexture greyMap = new RenderTexture(_sourceImage.width,_sourceImage.height,0,RenderTextureFormat.RFloat,RenderTextureReadWrite.Linear);
+        //这里这个图的尺寸需要根据MIPmap来的
+        RenderTexture greyMap = new RenderTexture(_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),0,RenderTextureFormat.RFloat,RenderTextureReadWrite.Linear);
         Graphics.Blit(tempTex,greyMap,tempMat);
         //保存两张图
 
         Texture2D reference = toTexture2D(checkMap,TextureFormat.RGB24);
-        Texture2D grey = toTexture2D(greyMap,TextureFormat.R8);;
-            
-        SaveTexturePNG(reference,$"{_sourceImage.name}_reference");
-        SaveTexturePNG(grey,$"{_sourceImage.name}_grey");
-        SaveTexturePNG(tempTex,$"{_sourceImage.name}_raw");
+        Texture2D grey = toTexture2D(greyMap,TextureFormat.RFloat);;
+        string usmid = midmode ? "mid" : "avg" ;
+        SaveTexturePNG(reference,_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),$"{_sourceImage.name}_reference_{usmid}");
+        SaveTexturePNG(grey,_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),$"{_sourceImage.name}_grey_{usmid}");
+        SaveTexturePNG(tempTex,_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),$"{_sourceImage.name}_raw_{usmid}");
         AssetDatabase.Refresh();
         //保存两张图
     }
 
-    static void SaveTexturePNG(Texture2D sourceTex,string name ="result")
+    static void SaveTexturePNG(Texture2D sourceTex,int width,int height ,string name ="result")
     {
-        byte[] bytes = ImageConversion.EncodeArrayToPNG(sourceTex.GetRawTextureData(), sourceTex.graphicsFormat, (uint)sourceTex.width, (uint)sourceTex.height);
+        byte[] bytes = ImageConversion.EncodeArrayToPNG(sourceTex.GetRawTextureData(), sourceTex.graphicsFormat, (uint)width, (uint)height);
         File.WriteAllBytes(Application.dataPath +  $"/{name}.png", bytes);
     }
     static void SaveTextureEXR(Texture2D sourceTex,string name ="result")
@@ -276,66 +304,76 @@ public class GradientMapGenerator : EditorWindow
         textureImporter.isReadable = enable;
         AssetDatabase.ImportAsset(path,ImportAssetOptions.ForceUpdate);
     }
-    static Color[] GenerateLookupTex(Color[] _pixels,Texture2D _sourceImage){
-        Color[] result = MedianCut.cut(_pixels.ToList());
+    static Color[] getLookupPixels(Color[] _pixels){
+        Color[] result = midmode ? MedianCut.cut(_pixels.ToList()) : MedianCut.cutByAverage(_pixels.ToList());
+        return result;
+    }
+    static void GenerateLookupTex(Color[] result,Texture2D _sourceImage){
+        //TODO: 这里有一个256的要改成参数 看看是不是比如说用128或者512这样 有个插值 会更平滑一点。
         Texture2D gradientMap = new Texture2D(256,8,TextureFormat.RGB24,true,false); //srgb lookuptex
         Color[] gradientMapPixel = new Color[2048]; 
         for(int i = 0; i < gradientMapPixel.Length;i++){
             int index = (int)i % 256;
             gradientMapPixel[i] = result[index];
         } //按行填满
-        gradientMap.SetPixels(gradientMapPixel);
+        gradientMap.SetPixels(gradientMapPixel); 
         gradientMap.Apply();
-        SaveTexturePNG(gradientMap,$"{_sourceImage.name}_lookup");
-        return result;
+        string usmid = midmode ? "mid" : "avg" ;
+        SaveTexturePNG(gradientMap,256,8,$"{_sourceImage.name}_lookup_{usmid}");
+    }
+    static void DoSingle(){
+        if(!sourceImage.isReadable){
+            String path = AssetDatabase.GetAssetPath(sourceImage);
+            readwriteOnOff(path);
+        }
+        pixels = sourceImage.GetPixels(mip);
+        Color[] result = getLookupPixels(pixels);
+        generateGreyMap(result,pixels,sourceImage);
+        // GenerateLookupTex(result,sourceImage);
+    }
+    static void DoALot(){
+        // string[] guidsTexture2d = AssetDatabase.FindAssets("t:Texture2D", new String[1]{pathDir});
+        // if(guidsTexture2d.Length > 0){
+        //     foreach (string guid in guidsTexture2d)
+        //     {
+        //         // Debug.Log(AssetDatabase.GUIDToAssetPath(guid));
+        //         Texture2D tempTex = (Texture2D)AssetDatabase.LoadAssetAtPath(AssetDatabase.GUIDToAssetPath(guid), typeof(Texture2D));
+        //         if(tempTex !=null){
+        //             if(!tempTex.isReadable){
+        //                 String path = AssetDatabase.GetAssetPath(tempTex);
+        //                 readwriteOnOff(path);
+        //                 sourceImage = tempTex; //这里是为了保证mipmap的尺寸。生成图的时候mipmap尺寸是找source的，这里给个reference
+        //             }
+        //             pixels = tempTex.GetPixels(mip);
+        //             Color[] result = GenerateLookupTex(pixels,tempTex);
+        //             generateGreyMap(result,pixels,tempTex);
+        //         }
+        //     }
+        // }
     }
     void OnGUI()
     {   
         #region single
         EditorGUILayout.BeginHorizontal();
         EditorGUILayout.LabelField("targetMip");
-        mip = EditorGUILayout.IntSlider(mip, 0, 11);
+
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.BeginHorizontal();
         EditorGUILayout.LabelField("SourceTex");
         sourceImage = (Texture2D)EditorGUILayout.ObjectField(sourceImage, typeof(Texture2D), true);
         EditorGUILayout.EndHorizontal();
-        // DebugMode = EditorGUILayout.Toggle("Debug Mode", DebugMode);
+        midmode = EditorGUILayout.Toggle("mid mode", midmode);
+        
         if (GUILayout.Button("Generate!") && sourceImage != null){
+            DoSingle();
 
-            if(!sourceImage.isReadable){
-                String path = AssetDatabase.GetAssetPath(sourceImage);
-                readwriteOnOff(path);
-            }
-            pixels = sourceImage.GetPixels(mip);
-            Color[] result = GenerateLookupTex(pixels,sourceImage);
-            generateGreyMap(result,pixels,sourceImage);
         }
-        // if(gradientMap!=null){
-        //     EditorGUI.DrawPreviewTexture(new Rect(0, 300, 1024, 10), gradientMap);
-        // }  
         #endregion
         #region path
         EditorGUILayout.LabelField("Path Dir.Please Put All the Texture2D in the root");
         pathDir = EditorGUILayout.TextField(pathDir);
         if (GUILayout.Button("Path Generate!") && pathDir != null){
-            string[] guidsTexture2d = AssetDatabase.FindAssets("t:Texture2D", new String[1]{pathDir});
-            if(guidsTexture2d.Length > 0){
-                foreach (string guid in guidsTexture2d)
-                {
-                    Debug.Log(AssetDatabase.GUIDToAssetPath(guid));
-                    Texture2D tempTex = (Texture2D)AssetDatabase.LoadAssetAtPath(AssetDatabase.GUIDToAssetPath(guid), typeof(Texture2D));
-                    if(tempTex !=null){
-                        if(!tempTex.isReadable){
-                            String path = AssetDatabase.GetAssetPath(tempTex);
-                            readwriteOnOff(path);
-                        }
-                        pixels = tempTex.GetPixels(mip);
-                        Color[] result = GenerateLookupTex(pixels,tempTex);
-                        generateGreyMap(result,pixels,tempTex);
-                    }
-                }
-            }
+            DoALot();
         }
         #endregion
     
