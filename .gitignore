@@ -335,6 +335,6 @@ ASALocalRun/
 
 #custom
 localTest/
-Library/
+Library/*
 
 *.bin
