@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
-// testchange
+// TODO 这里加一些成员变量去做比较好 很多参数需要传递的 不过这样搞的有点复杂 等有心人去优化吧
 public class MedianCut 
 {   
     struct freandcolor
@@ -54,6 +54,24 @@ public class MedianCut
     static int SortByB(Color pixel1,Color pixel2){
         return pixel1[2].CompareTo(pixel2[2]);
     }
+    static int nextPowerOf2(int n)
+    {
+        int count = 0;
+ 
+        // First n in the below
+        // condition is for the
+        // case where n is 0
+        if (n > 0 && (n & (n - 1)) == 0)
+            return n;
+ 
+        while(n != 0)
+        {
+            n >>= 1;
+            count += 1;
+        }
+ 
+        return 1 << count;
+    }
     static List<Color>[] splitBox(int _component,List<Color> _box){
         switch (_component)
         {
@@ -76,24 +94,6 @@ public class MedianCut
         result[1] = _box.Skip(halfLength).ToList();
         
         return result;
-    }
-    static int nextPowerOf2(int n)
-    {
-        int count = 0;
- 
-        // First n in the below
-        // condition is for the
-        // case where n is 0
-        if (n > 0 && (n & (n - 1)) == 0)
-            return n;
- 
-        while(n != 0)
-        {
-            n >>= 1;
-            count += 1;
-        }
- 
-        return 1 << count;
     }
     public static Color[] meanColor(int n, List<List<Color>> _boxs){
         Color[] result = new Color[n];
@@ -175,6 +175,7 @@ public class MedianCut
         while(allpixels.Count + backuppixels.Count<size){
             List<Color> currentBox = allpixels[0];    
             allpixels.RemoveAt(0); 
+
             if(currentBox.Count>2){
                 int currentMaxRangeComponentResult = getMaxRangeComponent(GetRange(currentBox)); 
                 List<Color>[] currentSplitResult = splitBoxByMeanColor(currentBox,currentMaxRangeComponentResult); 
@@ -226,7 +227,8 @@ public class MedianCut
     /// <param name="lookup">the look up gradient map</param>
     /// <param name="source">raw image</param>
     /// <param name="StatisticsMap">for check the frequence of the look up pixels</param>
-    /// <returns></returns>
+    /// <returns>new pixels</returns>
+    
     public static Color[] FindCloestColor(Color[] lookup,Color[] source,out int[] StatisticsMap,out Color[] newlookup){
         #region first time pre calculate frequence and ready for sort
         Color[] greyImagePixels = new Color[source.Length];
@@ -256,25 +258,37 @@ public class MedianCut
             count++;
         }
         #endregion
-        #region check the frequence
-        List<freandcolor> freandcolors = new List<freandcolor>();
-        for(int i = 0; i<lookup.Length;i++){
-            freandcolor fc = new freandcolor();
-            fc.color = lookup[i];
-            fc.freq = StatisticsMap[i];
-            freandcolors.Add(fc);
-        }
-        freandcolors.Sort(delegate(freandcolor a, freandcolor b) { return -a.freq.CompareTo(b.freq); });
-        newlookup = new Color[lookup.Length];
-        for(int i = 0;i<freandcolors.Count;i++){
-            StatisticsMap[i] = freandcolors[i].freq;
-            newlookup[i] = freandcolors[i].color;
-        }
-        #endregion
-        #region regenerategreymap
-        greyImagePixels = null;
-        greyImagePixels = FindCloestColor(newlookup,source);
-        #endregion
+
+            #region check the frequence
+            List<freandcolor> freandcolors = new List<freandcolor>();
+            for(int i = 0; i<lookup.Length;i++){
+                freandcolor fc = new freandcolor();
+                fc.color = lookup[i];
+                fc.freq = StatisticsMap[i];
+                freandcolors.Add(fc);
+            }
+            freandcolors.Sort(delegate(freandcolor a, freandcolor b) { return -a.freq.CompareTo(b.freq); });
+            newlookup = new Color[lookup.Length];
+            for(int i = 0;i<freandcolors.Count;i++){
+                StatisticsMap[i] = freandcolors[i].freq;
+                newlookup[i] = freandcolors[i].color;
+            }
+            #endregion
+
+            #region regenerategreymap
+            greyImagePixels = null;
+            greyImagePixels = FindCloestColor(newlookup,source);
+            #endregion
+        
         return greyImagePixels;
     }
+    // public static Color[][] combineCut(List<Color> _box,int n = 256){
+    //     Color[] avg = cutByAverage(_box,n);
+    //     Color[] mid = cut(_box,n);
+    //     Color[][] result = new Color[2][];
+    //     result[0] = avg;
+    //     result[1] = mid;
+    //     return result;
+    // }
+
 }
