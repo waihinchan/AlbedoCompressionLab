@@ -107,10 +107,10 @@ public class MedianCut
         }
         return result;
     }
-    public static Color[] cut(List<Color> _box,int n = 256){
+    public static Color[] cut(List<Color> _box,int n = 256,bool usePow = true){
         List<List<Color>> allpixels = new List< List<Color> >(); //这个用于最终的加权
         allpixels.Add(_box);//初始
-        int size = nextPowerOf2(n);
+        int size = usePow?nextPowerOf2(n):n;
         while(allpixels.Count<size){
             List<Color> currentBox = allpixels[0];
             allpixels.RemoveAt(0); //操作那个就把那个弹出 然后把分裂的结果加在最后面，等待下一次的分裂
@@ -167,11 +167,11 @@ public class MedianCut
         return result;
     }
     
-    public static Color[] cutByAverage(List<Color> _box,int n = 256){
+    public static Color[] cutByAverage(List<Color> _box,int n = 256,bool usePow = true){
         List<List<Color>> allpixels = new List< List<Color> >(); 
         List<List<Color>> backuppixels = new List< List<Color> >(); 
         allpixels.Add(_box);//初始
-        int size = nextPowerOf2(n);
+        int size = usePow?nextPowerOf2(n):n;
         while(allpixels.Count + backuppixels.Count<size){
             List<Color> currentBox = allpixels[0];    
             allpixels.RemoveAt(0); 
@@ -223,6 +223,7 @@ public class MedianCut
     }
     /// <summary>
     /// we don't wrap this because we do this twice in one function to get the frequence at first time.
+    /// TODO optimize the int[] stuff into a map
     /// </summary>
     /// <param name="lookup">the look up gradient map</param>
     /// <param name="source">raw image</param>
@@ -271,6 +272,7 @@ public class MedianCut
             newlookup = new Color[lookup.Length];
             for(int i = 0;i<freandcolors.Count;i++){
                 StatisticsMap[i] = freandcolors[i].freq;
+                Debug.Log(StatisticsMap[i]);
                 newlookup[i] = freandcolors[i].color;
             }
             #endregion
@@ -282,13 +284,5 @@ public class MedianCut
         
         return greyImagePixels;
     }
-    // public static Color[][] combineCut(List<Color> _box,int n = 256){
-    //     Color[] avg = cutByAverage(_box,n);
-    //     Color[] mid = cut(_box,n);
-    //     Color[][] result = new Color[2][];
-    //     result[0] = avg;
-    //     result[1] = mid;
-    //     return result;
-    // }
 
 }
