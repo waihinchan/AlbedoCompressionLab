@@ -9,6 +9,10 @@ using System.Linq;
 public class GradientMapGenerator : EditorWindow
 {   
     #region members
+    static private bool s_tool = false;
+    static private bool s_public = false;
+    static private bool s_optimize = false;
+    static private bool s_complexOptimize = true;
     static private bool minReslookup = true;
     static private bool Autooptimize = false;
     static private float differenceThreshold = 0.05f;
@@ -52,7 +56,6 @@ public class GradientMapGenerator : EditorWindow
         File.WriteAllBytes(savePath, bytes);
         AssetDatabase.Refresh();
         return "Assets" +  $"/{name}.png";
-        // return AssetDatabase.GUIDToAssetPath(AssetDatabase.FindAssets("t:Texture2D,name")[0]);
     }
     /// <summary>
     /// RT TO texture2d to PNG
@@ -79,7 +82,6 @@ public class GradientMapGenerator : EditorWindow
         if(results.ContainsKey("sortLookup")){
             string path = SaveTexturePNG(results["sortLookup"],results["sortLookup"].width,results["sortLookup"].height,$"{name}_Lookup_{mode}_{extraInfo}");
             reImportTexture(path,false,false,true,FilterMode.Point,TextureWrapMode.Mirror, TextureImporterCompression.Uncompressed);
-
         }
         if(results.ContainsKey("Statistics")){
             string path = SaveTexturePNG(results["Statistics"],results["Statistics"].width,results["Statistics"].height,$"{name}_Statistics_{mode}_{extraInfo}");
@@ -87,7 +89,6 @@ public class GradientMapGenerator : EditorWindow
         if(results.ContainsKey("optimizeLookup")){
             string path = SaveTexturePNG(results["optimizeLookup"],results["optimizeLookup"].width,results["optimizeLookup"].height,$"{name}_optimizeLookup_{mode}_{extraInfo}");
         }
-         
     }
     static void reImportTexture(string path,bool enableReadWrite = true,bool enableMipMap = false,bool enableSrgb = false,FilterMode flitermode = FilterMode.Point, TextureWrapMode wrapMode = TextureWrapMode.Repeat,TextureImporterCompression texturecompression = TextureImporterCompression.Uncompressed){
         TextureImporter textureImporter = (TextureImporter) AssetImporter.GetAtPath( path );
@@ -119,12 +120,34 @@ public class GradientMapGenerator : EditorWindow
         StatisticsMapTex.Apply();
         return StatisticsMapTex;
     }
-
-    
-    static Dictionary<string,Texture2D> generateGreyMap(Color[] _lookup,Color[] source,Texture2D _sourceImage){
-        if(GreyMapShader==null){
-            LoadShader();
+    static Dictionary<string,Texture2D> generateGreyMap(Color[] _lookup,Color[] source,Texture2D _sourceImage,Color[] rawGrey,List<int> mask){
+        Texture2D referenceTex = new Texture2D(_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),TextureFormat.RGBA32,false);
+        Color[] maskPixels = MedianCut.FindCloestColor(_lookup,source);
+        Color[] referencePixels = rawGrey;
+        //替换掉
+        for(int i = 0; i<mask.Count;i++){
+            int maskIndex = mask[i];
+            referencePixels[maskIndex] = maskPixels[maskIndex];
         }
+        //替换掉
+        referenceTex.SetPixels(referencePixels);
+        referenceTex.Apply();
+        Texture2D lookupTex = GenerateLookupTex(_lookup,_sourceImage);//can do the save stuff this outsite
+        Color[] greyPixels = new Color[referencePixels.Length]; //RGBA -> A
+        for(int i = 0; i < referencePixels.Length;i++){
+            float a = referencePixels[i].a;
+            greyPixels[i] = new Color(a,a,a);
+        }
+        Texture2D grey = new Texture2D(_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),TextureFormat.RFloat,false,true);
+        grey.SetPixels(greyPixels);
+        grey.Apply();
+        Dictionary<string,Texture2D> results = new Dictionary<string, Texture2D>();
+        results["grey"] = grey;
+        results["reference"] = referenceTex;
+        results["sortLookup"] = lookupTex;
+        return results;
+    }
+    static Dictionary<string,Texture2D> generateGreyMap(Color[] _lookup,Color[] source,Texture2D _sourceImage){
         Texture2D referenceTex = new Texture2D(_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),TextureFormat.RGBA32,false);
         int[] StatisticsMap; //frequencey result
         Color[] sortLookup; //new sortLookupMap
@@ -141,28 +164,7 @@ public class GradientMapGenerator : EditorWindow
         Texture2D grey = new Texture2D(_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),TextureFormat.RFloat,false,true);
         grey.SetPixels(greyPixels);
         grey.Apply();
-        #region use Shader to split the channel
-        // Material tempMat = new Material(GreyMapShader);
-        // RenderTexture checkMap = new RenderTexture(_sourceImage.width,_sourceImage.height,0,RenderTextureFormat.Default,RenderTextureReadWrite.Linear); //这里数据因为是已经计算好的 只是用于分离通道 所以直接线性写入不要修改
-        // tempMat.SetTexture("_SourceTex",referenceTex);
-        // tempMat.SetInt("_Grey",0);
-        // Graphics.Blit(referenceTex,checkMap,tempMat);
-        // tempMat.SetInt("_Grey",1);
-        // tempMat.SetTexture("_SourceTex",referenceTex);
-        // //这里这个图的尺寸需要根据MIPmap来的
-        // RenderTexture greyMap = new RenderTexture(_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),0,RenderTextureFormat.RFloat,RenderTextureReadWrite.Linear);
-        // Graphics.Blit(referenceTex,greyMap,tempMat);
-        // //保存两张图
-        // Texture2D reference = toTexture2D(checkMap,TextureFormat.RGB24);
-        // Texture2D grey = toTexture2D(greyMap,TextureFormat.RFloat);
-        #endregion
-        // SaveTexturePNG(reference,_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),$"{_sourceImage.name}_reference_{usmid}");
-        // SaveTexturePNG(grey,_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),$"{_sourceImage.name}_grey_{usmid}");
-        // SaveTexturePNG(referenceTex,_sourceImage.width/(int)Mathf.Pow(2,mip),_sourceImage.height/(int)Mathf.Pow(2,mip),$"{_sourceImage.name}_raw_{usmid}");
-        // AssetDatabase.Refresh();
-        //保存两张图
         Dictionary<string,Texture2D> results = new Dictionary<string, Texture2D>();
-
         results["grey"] = grey;
         results["reference"] = referenceTex;
         results["sortLookup"] = lookupTex;
@@ -176,6 +178,8 @@ public class GradientMapGenerator : EditorWindow
     }
     static Texture2D GenerateLookupTex(Color[] result,Texture2D _sourceImage,bool minRes=true){
         //TODO: 这里有一个256的要改成参数 看看是不是比如说用128或者512这样 有个插值 会更平滑一点。
+        //经过实验没什么卵用 就用256就可以 如果实在很担心浮点的精度问题可以用512.
+        //后续要考虑是不是做一个手动的mipMap去steam比较好。现有的mipMap算法会破坏我们的索引。当然如果是先用RT缓存好结果再去做mipMap就基本上没什么问题了。
         int Height = minRes?1:8;
         Texture2D gradientMap = new Texture2D(256,Height,TextureFormat.RGB24,true,false); //temp we want 256 res
         Color[] gradientMapPixel = new Color[ 256 * Height]; 
@@ -187,23 +191,68 @@ public class GradientMapGenerator : EditorWindow
         gradientMap.Apply();
         return gradientMap;
     }
-    
-    static Color[][] Optimize(Texture2D greymap,Texture2D lookupmap,Texture2D rawMap, int[] frequenceMap){
+    /// <summary>
+    /// 第二种优化方法是原有的内容不动，然后只针对difference的区域
+    /// </summary>
+    /// <param name="greymap"></param>
+    /// <param name="lookupmap"></param>
+    /// <param name="rawMap"></param>
+    /// <param name="frequenceMap"></param>
+    /// <returns></returns>
+    static Color[] Optimize(Texture2D _greymap,Texture2D _lookupmap,Texture2D _rawMap, int[] frequenceMap, int countThreshold){
         #region getdifference Index
-        Material tempMat = new Material(utilsShader);
-        tempMat.SetTexture("_grey",greymap);
-        tempMat.SetTexture("_raw",rawMap);
-        tempMat.SetTexture("_lookup",lookupmap);
-        tempMat.SetFloat("_difference",differenceThreshold);
-        RenderTexture differenceMap = new RenderTexture(rawMap.width,rawMap.height,0,RenderTextureFormat.RFloat,RenderTextureReadWrite.Linear); 
-        Graphics.Blit(rawMap,differenceMap,tempMat);
-        Texture2D difference = toTexture2D(differenceMap,TextureFormat.R8);
+        // Material tempMat = new Material(utilsShader);
+        // tempMat.SetTexture("_grey",_greymap);
+        // tempMat.SetTexture("_raw",_rawMap);
+        // tempMat.SetTexture("_lookup",_lookupmap);
+        // tempMat.SetFloat("_difference",differenceThreshold);
+        // RenderTexture differenceMap = new RenderTexture(_rawMap.width,_rawMap.height,0,RenderTextureFormat.RFloat,RenderTextureReadWrite.Linear); 
+        // Graphics.Blit(_rawMap,differenceMap,tempMat);
+        // Texture2D difference = toTexture2D(differenceMap,TextureFormat.R8);
         #endregion
+        Texture2D difference = GPUDecode(_greymap,_rawMap,_lookupmap);
+        #region regenerate the rest lookup map
+        Color[] rawdifferencePixels = difference.GetPixels();
+        Color[] rawPixels = _rawMap.GetPixels();
+        List<Color> checkdifferencePixels = new List<Color>();
+        for(int i = 0; i < rawdifferencePixels.Length;i++){
+            if(rawdifferencePixels[i].r>0){
+                checkdifferencePixels.Add(rawPixels[i]); //we want to raw one but not the difference one
+            }
+        }
+        Debug.Log(checkdifferencePixels.Count);
+        int count = 0; //get how many not used lookup we can use
+        List<int> recordIndex  = new List<int>();
+        for(int i = 0;i < frequenceMap.Length;i++)
+        {
+            if(frequenceMap[i] <= countThreshold){ 
+                count++;
+                recordIndex.Add(i);
+                
+            }
+        }
+        #endregion
+        Color[] newLookup = MedianCut.cutByAverage(checkdifferencePixels,count,true);
+        int[] smap;
+        Color[] sortLookup;
+        MedianCut.FindCloestColor(newLookup,rawPixels,out smap,out sortLookup);
+        Color[] finalResult = _lookupmap.GetPixels(); 
+        //用平均值的方法去关注异常值补全
+        //这里的长度是大于等于剩余的空插槽的
 
+        //sortLookup[0,1,2,3,4...] to rawLookup[N,N+1,N+2,N+3] N = where smap less than 0 , sortLookup is the most used lookup color
+        for(int i = 0;i<recordIndex.Count;i++){
+            int indexinoldlookup = recordIndex[i];
+            finalResult[indexinoldlookup] = sortLookup[i]; 
+        }
+        return finalResult;
+    }
+    static Color[][] Optimize(Texture2D _greymap,Texture2D _lookupmap,Texture2D _rawMap, int[] frequenceMap){
+        Texture2D difference = GPUDecode(_greymap,_rawMap,_lookupmap);
         Dictionary<int,Color> checkDict = new Dictionary<int,Color>();
 
         Color[] rawdifferencePixels = difference.GetPixels();
-        Color[] rawPixels = rawMap.GetPixels();
+        Color[] rawPixels = _rawMap.GetPixels();
         List<Color> checkdifferencePixels = new List<Color>();
         for(int i = 0; i < rawdifferencePixels.Length;i++){
             if(rawdifferencePixels[i].r>0){
@@ -224,7 +273,7 @@ public class GradientMapGenerator : EditorWindow
         
         Color[] newLookup = MedianCut.cutByAverage(checkdifferencePixels,count,false); //用平均值的方法去关注异常值补全
         #region newLookup to oldLookup 0 index
-        Color[] oldLookup = lookupmap.GetPixels();
+        Color[] oldLookup = _lookupmap.GetPixels();
         int pick = newLookup.Length-1; 
         foreach (int record in recordIndex)
         {
@@ -238,27 +287,29 @@ public class GradientMapGenerator : EditorWindow
         return result;
     }
     static void DoOptimize(Texture2D _rawImage,Texture2D _greyImage,Texture2D _lookupImage){
-        if(utilsShader==null||GreyMapShader){
-            LoadShader();
-        }
+
         Color[] rawLookup = _lookupImage.GetPixels();
         Color[] rawSource = _rawImage.GetPixels();
         int[] smap;
         Color[] sortLookup;
-        
-        MedianCut.FindCloestColor(rawLookup,rawSource,out smap,out sortLookup); //before
-        //this result should be match the 1st time cut
-        //we just want the smap
-        Color[][] result = Optimize(_greyImage,_lookupImage,_rawImage,smap); //0 is the optimize ,1 is combine the old 
-
-        Dictionary<string,Texture2D> newResults = generateGreyMap(result[1],rawSource,_rawImage);
-        int height = minReslookup?1:8;
-        Texture2D optimizeLookupTex = new Texture2D(result[0].Length,height,TextureFormat.RGB24,false);
-        optimizeLookupTex.SetPixels(result[0]);
-        optimizeLookupTex.Apply();
-        newResults["optimizeLookup"] = optimizeLookupTex;
-        string mode = midmode?"mid":"avg";
-        SaveAllResults(newResults,_rawImage.width,_rawImage.height,_rawImage.name,mode,"optimize");
+        MedianCut.FindCloestColor(rawLookup,rawSource,out smap,out sortLookup);
+        if(s_complexOptimize){
+            Color[] result = Optimize(_greyImage,_lookupImage,_rawImage,smap,10); 
+            Dictionary<string,Texture2D> Allresult = generateGreyMap(result,rawSource,_rawImage);
+            string mode = midmode?"mid":"avg";
+            SaveAllResults(Allresult,_rawImage.width,_rawImage.height,_rawImage.name,mode,"optimize_complex");
+        }
+        else{
+            Color[][] result = Optimize(_greyImage,_lookupImage,_rawImage,smap); //0 is the optimize ,1 is combine the old 
+            Dictionary<string,Texture2D> newResults = generateGreyMap(result[1],rawSource,_rawImage);
+            int height = minReslookup?1:8;
+            Texture2D optimizeLookupTex = new Texture2D(result[0].Length,height,TextureFormat.RGB24,false);
+            optimizeLookupTex.SetPixels(result[0]);
+            optimizeLookupTex.Apply();
+            newResults["optimizeLookup"] = optimizeLookupTex;
+            string mode = midmode?"mid":"avg";
+            SaveAllResults(newResults,_rawImage.width,_rawImage.height,_rawImage.name,mode,"optimize");
+        }
     }
     static void DoSingle(){
         if(!sourceImage.isReadable){
@@ -294,26 +345,25 @@ public class GradientMapGenerator : EditorWindow
         
     } 
     static void DoALot(){
-        // string[] guidsTexture2d = AssetDatabase.FindAssets("t:Texture2D", new String[1]{pathDir});
-        // if(guidsTexture2d.Length > 0){
-        //     foreach (string guid in guidsTexture2d)
-        //     {
-        //         // Debug.Log(AssetDatabase.GUIDToAssetPath(guid));
-        //         Texture2D tempTex = (Texture2D)AssetDatabase.LoadAssetAtPath(AssetDatabase.GUIDToAssetPath(guid), typeof(Texture2D));
-        //         if(tempTex !=null){
-        //             if(!tempTex.isReadable){
-        //                 String path = AssetDatabase.GetAssetPath(tempTex);
-        //                 reImportTexture(path);
-        //                 sourceImage = tempTex; //这里是为了保证mipmap的尺寸。生成图的时候mipmap尺寸是找source的，这里给个reference
-        //             }
-        //             pixels = tempTex.GetPixels(mip);
-        //             Color[] result = GenerateLookupTex(pixels,tempTex);
-        //             generateGreyMap(result,pixels,tempTex);
-        //         }
-        //     }
-        // }
+        string[] guidsTexture2d = AssetDatabase.FindAssets("t:Texture2D", new String[1]{pathDir});
+        if(guidsTexture2d.Length > 0){
+            foreach (string guid in guidsTexture2d)
+            {
+                // Debug.Log(AssetDatabase.GUIDToAssetPath(guid));
+                Texture2D tempTex = (Texture2D)AssetDatabase.LoadAssetAtPath(AssetDatabase.GUIDToAssetPath(guid), typeof(Texture2D));
+                if(tempTex !=null){
+                    if(!tempTex.isReadable){
+                        String path = AssetDatabase.GetAssetPath(tempTex);
+                        reImportTexture(path);
+                        sourceImage = tempTex; 
+                        DoSingle();
+                    }
+                    
+                }
+            }
+        }
     }
-    static void CPUDecodeTest(Color[] greyPixels,Color[] LookupPixels,int width,int height){
+    static void CPUDecode(Color[] greyPixels,Color[] LookupPixels,int width,int height){
         Color[] result = new Color[greyPixels.Length];
         Texture2D resultTex = new Texture2D(width,height,TextureFormat.RGB24,false);
         for(int i = 0;i<result.Length;i++){
@@ -324,65 +374,83 @@ public class GradientMapGenerator : EditorWindow
         resultTex.Apply();
         SaveTexturePNG(resultTex,width,height,"cpudecode");
     }
+    static Texture2D GPUDecode(Texture2D _greymap,Texture2D _rawMap,Texture2D _lookupmap){
+        #region getdifference Index
+        if(utilsShader==null){
+            LoadShader();
+        }
+        Material tempMat = new Material(utilsShader);
+        tempMat.SetTexture("_grey",_greymap);
+        tempMat.SetTexture("_raw",_rawMap);
+        tempMat.SetTexture("_lookup",_lookupmap);
+        tempMat.SetFloat("_difference",differenceThreshold);
+        RenderTexture differenceMap = new RenderTexture(_rawMap.width,_rawMap.height,0,RenderTextureFormat.RFloat,RenderTextureReadWrite.Linear); 
+        Graphics.Blit(_rawMap,differenceMap,tempMat);
+        Texture2D difference = toTexture2D(differenceMap,TextureFormat.R8);
+        #endregion
+        return difference;
+    }
     void OnGUI()
     {   
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField("targetMip");
-        EditorGUILayout.IntSlider(mip, 0, 8);
-        EditorGUILayout.EndHorizontal();
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField("Advanced");
-        Autooptimize = EditorGUILayout.Toggle("AutoOptimize", Autooptimize);
-        differenceThreshold = EditorGUILayout.FloatField("difference threshold", differenceThreshold);
-        midmode = EditorGUILayout.Toggle("mid mode", midmode);
-        combineCut = EditorGUILayout.Toggle("cut by both", combineCut);
-        EditorGUILayout.EndHorizontal();
-        #region single
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField("SourceTex");
-        sourceImage = (Texture2D)EditorGUILayout.ObjectField(sourceImage, typeof(Texture2D), true);
-        EditorGUILayout.EndHorizontal();
-        if (GUILayout.Button("Generate!") && sourceImage != null){
-            DoSingle();
-        }
-        #endregion
-        #region path
-        EditorGUILayout.LabelField("Path Dir.Please Put All the Texture2D in the root");
-        pathDir = EditorGUILayout.TextField(pathDir);
-        if (GUILayout.Button("Path Generate!") && pathDir != null){
-            DoALot();
-        }
-        #endregion
-        #region optimize
-        // EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField("grey");
-        greyImage = (Texture2D)EditorGUILayout.ObjectField(greyImage, typeof(Texture2D), true);
-        EditorGUILayout.LabelField("raw");
-        rawImage = (Texture2D)EditorGUILayout.ObjectField(rawImage, typeof(Texture2D), true);
-        EditorGUILayout.LabelField("lookup");
-        lookupImage = (Texture2D)EditorGUILayout.ObjectField(lookupImage, typeof(Texture2D), true);
-        // EditorGUILayout.EndHorizontal();
-        if (GUILayout.Button("Optimize!") && greyImage != null &&rawImage != null &&lookupImage != null){
-            if(!rawImage.isReadable){
-                String path = AssetDatabase.GetAssetPath(rawImage);
-                reImportTexture(path,true,false,true);
-            }
-            if(!greyImage.isReadable){
-                String path1 = AssetDatabase.GetAssetPath(greyImage);
-                reImportTexture(path1,true,false,false);
-            }
-            if(!lookupImage.isReadable){
-                String path2 = AssetDatabase.GetAssetPath(lookupImage);
-                reImportTexture(path2,true,false,true,FilterMode.Point,TextureWrapMode.Mirror);
-            }
-            Color[] greyPixels = greyImage.GetPixels();
-            Color[] LookupPixels = lookupImage.GetPixels();
-            // CPUDecodeTest(greyPixels,LookupPixels,greyImage.width,greyImage.height);
-            DoOptimize(rawImage,greyImage,lookupImage);
-        }
-        #endregion
 
-            
+        s_public = EditorGUILayout.BeginFoldoutHeaderGroup(s_public,"公共");
+        if(s_public){
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("mip级别，如果是512*512就不用改，1024选1，2048选2，以此类推");
+            EditorGUILayout.IntSlider(mip, 0, 8);
+            EditorGUILayout.EndHorizontal();
+            Autooptimize = EditorGUILayout.Toggle("自动优化", Autooptimize);
+            differenceThreshold = EditorGUILayout.FloatField("优化阈值", differenceThreshold);
+            midmode = EditorGUILayout.Toggle("使用中值切割", midmode);
+            combineCut = EditorGUILayout.Toggle("同时生成两种切割的结果", combineCut);
+        }
+        EditorGUILayout.EndFoldoutHeaderGroup();
+        s_tool  = EditorGUILayout.BeginFoldoutHeaderGroup(s_tool,"主界面");
+        if(s_tool){
+            EditorGUILayout.LabelField("原图");
+            EditorGUILayout.BeginHorizontal();
+            sourceImage = (Texture2D)EditorGUILayout.ObjectField(sourceImage, typeof(Texture2D), true);
+            if (GUILayout.Button("生成") && sourceImage != null){
+                DoSingle();
+            }
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.LabelField("把要压缩的贴图放在一个文件夹，复制路径");
+            EditorGUILayout.BeginHorizontal();
+            pathDir = EditorGUILayout.TextField(pathDir);
+            if (GUILayout.Button("批量生成") && pathDir != null){
+                DoALot();
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+        EditorGUILayout.EndFoldoutHeaderGroup();
+        s_optimize = EditorGUILayout.BeginFoldoutHeaderGroup(s_optimize,"优化");
+        if(s_optimize){
+            EditorGUILayout.LabelField("生成的灰度图");
+            greyImage = (Texture2D)EditorGUILayout.ObjectField(greyImage, typeof(Texture2D), true);
+            EditorGUILayout.LabelField("原图");
+            rawImage = (Texture2D)EditorGUILayout.ObjectField(rawImage, typeof(Texture2D), true);
+            EditorGUILayout.LabelField("生成的渐变图");
+            lookupImage = (Texture2D)EditorGUILayout.ObjectField(lookupImage, typeof(Texture2D), true);
+            if (GUILayout.Button("手动优化") && greyImage != null &&rawImage != null &&lookupImage != null){
+                if(!rawImage.isReadable){
+                    String path = AssetDatabase.GetAssetPath(rawImage);
+                    reImportTexture(path,true,false,true);
+                }
+                if(!greyImage.isReadable){
+                    String path1 = AssetDatabase.GetAssetPath(greyImage);
+                    reImportTexture(path1,true,false,false);
+                }
+                if(!lookupImage.isReadable){
+                    String path2 = AssetDatabase.GetAssetPath(lookupImage);
+                    reImportTexture(path2,true,false,true,FilterMode.Point,TextureWrapMode.Mirror);
+                }
+                Color[] greyPixels = greyImage.GetPixels();
+                Color[] LookupPixels = lookupImage.GetPixels();
+                DoOptimize(rawImage,greyImage,lookupImage);
+            }
+        }
+        EditorGUILayout.EndFoldoutHeaderGroup();     
+       
    
     }
 

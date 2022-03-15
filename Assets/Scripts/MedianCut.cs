@@ -172,10 +172,13 @@ public class MedianCut
         List<List<Color>> backuppixels = new List< List<Color> >(); 
         allpixels.Add(_box);//初始
         int size = usePow?nextPowerOf2(n):n;
+        Debug.Log(size);
         while(allpixels.Count + backuppixels.Count<size){
+            Debug.Log(allpixels.Count);
+            Debug.Log(backuppixels.Count);
             List<Color> currentBox = allpixels[0];    
             allpixels.RemoveAt(0); 
-
+            
             if(currentBox.Count>2){
                 int currentMaxRangeComponentResult = getMaxRangeComponent(GetRange(currentBox)); 
                 List<Color>[] currentSplitResult = splitBoxByMeanColor(currentBox,currentMaxRangeComponentResult); 
@@ -188,7 +191,8 @@ public class MedianCut
                 }
             }
         }
-        allpixels.Concat(backuppixels).ToList<List<Color>>();     
+        allpixels.Concat(backuppixels).ToList<List<Color>>();    
+        
         return meanColor(size,allpixels);
     }
     /// <summary>
@@ -229,7 +233,6 @@ public class MedianCut
     /// <param name="source">raw image</param>
     /// <param name="StatisticsMap">for check the frequence of the look up pixels</param>
     /// <returns>new pixels</returns>
-    
     public static Color[] FindCloestColor(Color[] lookup,Color[] source,out int[] StatisticsMap,out Color[] newlookup){
         #region first time pre calculate frequence and ready for sort
         Color[] greyImagePixels = new Color[source.Length];
@@ -272,7 +275,6 @@ public class MedianCut
             newlookup = new Color[lookup.Length];
             for(int i = 0;i<freandcolors.Count;i++){
                 StatisticsMap[i] = freandcolors[i].freq;
-                Debug.Log(StatisticsMap[i]);
                 newlookup[i] = freandcolors[i].color;
             }
             #endregion
