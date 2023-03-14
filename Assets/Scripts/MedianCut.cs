@@ -72,6 +72,7 @@ public class MedianCut
  
         return 1 << count;
     }
+    
     static List<Color>[] splitBox(int _component,List<Color> _box){
         switch (_component)
         {
@@ -107,6 +108,7 @@ public class MedianCut
         }
         return result;
     }
+
     public static Color[] cut(List<Color> _box,int n = 256,bool usePow = true){
         List<List<Color>> allpixels = new List< List<Color> >(); //这个用于最终的加权
         allpixels.Add(_box);//初始
@@ -172,10 +174,8 @@ public class MedianCut
         List<List<Color>> backuppixels = new List< List<Color> >(); 
         allpixels.Add(_box);//初始
         int size = usePow?nextPowerOf2(n):n;
-        Debug.Log(size);
+        
         while(allpixels.Count + backuppixels.Count<size){
-            Debug.Log(allpixels.Count);
-            Debug.Log(backuppixels.Count);
             List<Color> currentBox = allpixels[0];    
             allpixels.RemoveAt(0); 
             
@@ -286,5 +286,51 @@ public class MedianCut
         
         return greyImagePixels;
     }
+    public static Texture2D MidByKernel(Texture2D source,int mip) {
 
+        Texture2D result = new Texture2D(source.width,source.height);
+        for (int y = 0; y < result.height; y++)
+        {
+            for (int x = 0; x < result.width; x++)
+            {   
+                Color color1 = source.GetPixel(x+1, y);
+                Color color2 = source.GetPixel(x-1, y);
+                Color color3 = source.GetPixel(x, y+1);
+                Color color4 = source.GetPixel(x, y-1);
+                Color color5 = source.GetPixel(x-1, y+1);
+                Color color6 = source.GetPixel(x+1, y-1);
+                Color color7 = source.GetPixel(x-1, y-1);
+                Color color8 = source.GetPixel(x+1, y+1);
+                Color color9 = source.GetPixel(x, y);
+                List<Color> tempbox = new List<Color>();
+                tempbox.Add(color1);
+                tempbox.Add(color2);
+                tempbox.Add(color3);
+                tempbox.Add(color4);
+                tempbox.Add(color5);
+                tempbox.Add(color6);
+                tempbox.Add(color7);
+                tempbox.Add(color8);
+                tempbox.Add(color9);
+                int sortindex = getMaxRangeComponent(GetRange(tempbox));
+                switch (sortindex)
+                {
+                    case 0:
+                        tempbox.Sort(SortByR);
+
+                        break;
+                    case 1:
+                        tempbox.Sort(SortByG);
+
+                        break;
+                    case 2:
+                        tempbox.Sort(SortByB);
+
+                        break;
+                }
+                result.SetPixel(x, y, tempbox[5]);
+            }
+        }
+        return result;
+    }
 }

@@ -20,15 +20,15 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - Texture2D_3671835c962f46108caca4e8f294f648:
-        m_Texture: {fileID: 2800000, guid: 8db2efbd8354fa640b68db49f4822ddf, type: 3}
+        m_Texture: {fileID: 2800000, guid: d8a77c4261dec2e4dae1bdfbfe3001f3, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - Texture2D_6382efd33d6244bdba6ef07beacf299a:
-        m_Texture: {fileID: 2800000, guid: 4d888c79ff198cc4c96b13eb6aac2df7, type: 3}
+        m_Texture: {fileID: 2800000, guid: 4df672b3535af7446852608a041a56e7, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - Texture2D_68acc24fc3f9414b91df3b0279097fb1:
-        m_Texture: {fileID: 2800000, guid: e0101c8b7d4e1d847ade38265c8868ab, type: 3}
+        m_Texture: {fileID: 2800000, guid: 970feda7f2ea70348a7902aa5b033eaa, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - unity_Lightmaps:
@@ -47,9 +47,10 @@ Material:
     - BOOLEAN_227767F48ECA423DB3848B0A5CDAE97A: 0
     - BOOLEAN_560513BA030B4432B472D2E2FAD563F4: 0
     - BOOLEAN_9877C91BB1B84AB4AB5F7298366F2444: 0
+    - Vector1_15315d08c73c433d9f9e1f1dcb278200: 1
     - Vector1_3af9518b1bfb4c74b8f1a131ba9df322: 256
     - Vector1_9b48240610d5430e9a0809babf013e63: 0.5
     - Vector1_c7e67e66bb2f44f5b48e7e0ac5992ecd: 0.13
-    - Vector1_da207f6ac08a4ec883f93e9cff8d3c14: 0.1
+    - Vector1_da207f6ac08a4ec883f93e9cff8d3c14: 0.02
     m_Colors: []
   m_BuildTextureStacks: []
